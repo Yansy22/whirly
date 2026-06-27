@@ -145,7 +145,6 @@
         <p class="eyebrow" id="detailCat"></p>
         <p class="detail-tag" id="detailTag"></p>
         <p class="detail-name" id="detailName"></p>
-        <p class="detail-price" id="detailPrice"></p>
         <p class="detail-spec" id="detailSpec"></p>
         <div class="detail-rule"></div>
         <p class="detail-desc" id="detailDesc"></p>
@@ -166,7 +165,6 @@ const CONFIG = {
   shopName:"Whirly Co",
   instagram:"whirly_co",
   whatsapp:"",        // empty -> order routes to Instagram DM
-  currency:"Rs ",
   samplesOnHome:4,    // 홈에서 카테고리별로 보여줄 미리보기 개수
 };
 
@@ -174,11 +172,9 @@ const CATALOG = [{"key": "earrings", "label": "Earrings", "blurb": "Wire, crysta
 
 const $=id=>document.getElementById(id);
 const igUrl=()=>"https://instagram.com/"+CONFIG.instagram;
-const isSold=p=>String(p.soldout||"").trim().toLowerCase()==="true";
-const priceLabel=p=>{const v=String(p.price||"").trim();return v?CONFIG.currency+v:"";};
 const catByKey=k=>CATALOG.find(c=>c.key===k);
 function orderUrlFor(p){
-  const t="Hi "+CONFIG.shopName+"! I'd love to order the \""+(p.tagline||p.name)+"\". Is it available?";
+  const t="Hi "+CONFIG.shopName+"! I'm interested in the \""+(p.tagline||p.name)+"\" — could you tell me the price and how to order?";
   return CONFIG.whatsapp ? "https://wa.me/"+CONFIG.whatsapp+"?text="+encodeURIComponent(t) : igUrl();
 }
 
@@ -196,15 +192,12 @@ function mediaNode(p){
 }
 
 function productCard(catKey,p,i){
-  const sold=isSold(p);
   const a=document.createElement("a");
-  a.className="card"+(sold?" is-sold":"");a.href="#/p/"+catKey+"/"+i;
+  a.className="card";a.href="#/p/"+catKey+"/"+i;
   const thumb=mediaNode(p);thumb.className="thumb";
-  if(sold){const b=document.createElement("span");b.className="badge";b.textContent="Sold out";thumb.appendChild(b);}
   const tag=document.createElement("p");tag.className="c-tag";tag.textContent=p.tagline||p.name;
   const nm=document.createElement("p");nm.className="c-name";nm.textContent=p.name||"";
-  const price=document.createElement("p");price.className="price";price.textContent=priceLabel(p);
-  a.append(thumb,tag,nm,price);
+  a.append(thumb,tag,nm);
   return a;
 }
 
@@ -240,22 +233,15 @@ function renderDetail(key,idx){
   $("detailBack").textContent="\u2190 Back to "+cat.label.toLowerCase();
   const media=mediaNode(p);media.id="detailMedia";media.className="detail-media";
   $("detailMedia").replaceWith(media);
-  if(isSold(p)){const b=document.createElement("span");b.className="badge";b.textContent="Sold out";media.appendChild(b);}
   $("detailCat").textContent=cat.label;
   $("detailTag").textContent=p.tagline||p.name;
   $("detailName").textContent=p.name||"";
-  $("detailPrice").textContent=priceLabel(p);
   $("detailSpec").textContent=p.spec||"";
   $("detailDesc").textContent=p.description||"";
   const btn=$("orderBtn");
-  if(isSold(p)){
-    btn.textContent="Sold out";btn.setAttribute("aria-disabled","true");btn.removeAttribute("href");
-    $("orderNote").textContent="This one found a home — message to ask about a remake.";
-  }else{
-    btn.textContent=CONFIG.whatsapp?"Order on WhatsApp":"Order via Instagram DM";
-    btn.setAttribute("aria-disabled","false");btn.href=orderUrlFor(p);
-    $("orderNote").textContent="Opens a message with this piece's name already filled in.";
-  }
+  btn.textContent=CONFIG.whatsapp?"Ask on WhatsApp":"Ask on Instagram";
+  btn.href=orderUrlFor(p);
+  $("orderNote").textContent="Opens a message with this piece's name filled in — just ask about price & availability.";
 }
 
 function show(view){
