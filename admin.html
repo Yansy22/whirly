@@ -49,6 +49,17 @@
   .preview{margin-top:8px}
   .preview img{max-height:120px;border-radius:8px;border:1px solid var(--line)}
   .hint{font-size:11px;color:var(--muted);margin-top:5px}
+  .guide{background:rgba(168,222,224,.07);border:1px solid var(--line);border-radius:var(--r);margin-bottom:22px;overflow:hidden}
+  .guide summary{cursor:pointer;list-style:none;padding:14px 16px;font-size:14px;color:var(--aqua);font-weight:500;display:flex;align-items:center;justify-content:space-between}
+  .guide summary::-webkit-details-marker{display:none}
+  .guide summary::after{content:"›";font-size:20px;transition:transform .2s}
+  .guide[open] summary::after{transform:rotate(90deg)}
+  .guide .body{padding:2px 18px 18px}
+  .guide ol{margin:0;padding-left:20px}
+  .guide li{font-size:13.5px;color:#E4D2DA;margin-bottom:9px;line-height:1.55}
+  .guide li b{color:var(--moon);font-weight:500}
+  .guide .tips{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+  .guide .tips b{color:var(--aqua)}
 </style>
 </head>
 <body>
@@ -56,9 +67,24 @@
   <div id="gate" class="gate">Checking access…</div>
 
   <div id="app" style="display:none">
-    <h1>Whirly Co — manage your shop</h1>
+    <h1 id="appTitle">Manage your shop</h1>
     <p class="sub">Add a new piece, edit, or remove. Changes show on your website right away.</p>
     <div id="msg" class="msg"></div>
+
+    <details class="guide" open>
+      <summary>How this works — tap to read</summary>
+      <div class="body">
+        <ol>
+          <li><b>Add a piece:</b> fill in the name, pick a photo, and tap <b>Save piece</b>. It appears on your website straight away.</li>
+          <li><b>Name</b> is the pretty title customers see big (like <i>"Starlight you can wear"</i>). <b>Materials</b> is the small line underneath (like <i>"Silver-tone · star · pearl"</i>).</li>
+          <li><b>Edit:</b> tap <b>Edit</b> on any piece below, change what you like, then <b>Update</b>. Leave the photo empty to keep the current one.</li>
+          <li><b>Remove:</b> tap <b>Delete</b> on a piece to take it off the site.</li>
+        </ol>
+        <div class="tips">
+          <b>Tips ·</b> Tall (portrait) photos look best. There's no price or stock here on purpose — customers tap <i>"Ask on Instagram"</i> and you handle price &amp; orders in DMs, just like now. Add this page to your home screen so it's one tap away.
+        </div>
+      </div>
+    </details>
 
     <!-- FORM -->
     <div class="card">
@@ -67,10 +93,7 @@
       <input type="hidden" id="existingImage" />
 
       <label>Type</label>
-      <select id="fCategory">
-        <option value="earrings">Earrings</option>
-        <option value="necklaces">Necklaces</option>
-      </select>
+      <select id="fCategory"></select>
 
       <label>Name (shown big, e.g. "Starlight you can wear")</label>
       <input id="fTagline" placeholder="Starlight you can wear" />
@@ -109,10 +132,16 @@
               /admin.html?key=THAT-SECRET
    ============================================================ */
 const CONFIG = {
-  SUPABASE_URL:      "https://qpyvjbizbddczxbrojmp.supabase.co",
-  SUPABASE_ANON_KEY: "sb_publishable_HRY-vHeecirbaRUCiYyeOw_41KVgVYv",
-  ADMIN_KEY:         "whirlywhirly",
+  SUPABASE_URL:      "https://YOUR-PROJECT.supabase.co",
+  SUPABASE_ANON_KEY: "YOUR-ANON-PUBLIC-KEY",
+  ADMIN_KEY:         "change-this-to-a-long-secret",
   bucket:            "product-images",
+  shopName:          "Whirly Co",
+  // these keys/labels must match the categories in index.html
+  categories: [
+    { key:"earrings",  label:"Earrings"  },
+    { key:"necklaces", label:"Necklaces" },
+  ],
 };
 
 /* ---- access gate (secret in URL) ---- */
@@ -130,6 +159,12 @@ function boot(){
 const { createClient } = window.supabase;
 const sb = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 const $=id=>document.getElementById(id);
+
+// brand-specific bits from CONFIG
+document.title = CONFIG.shopName + " — manage";
+$("appTitle").textContent = CONFIG.shopName + " — manage your shop";
+$("fCategory").innerHTML = CONFIG.categories
+  .map(c=>'<option value="'+c.key+'">'+c.label+'</option>').join("");
 
 function flash(text, ok=true){
   const m=$("msg"); m.textContent=text; m.className="msg "+(ok?"ok":"err");
