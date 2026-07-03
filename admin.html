@@ -6,10 +6,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light only" />
+<meta name="supported-color-schemes" content="light" />
 <title>Whirly Co — manage</title>
 <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet" />
 <style>
-  :root{--night:#3D0B15;--surface:#4C1622;--surface2:#5A1B2A;--moon:#F6EFE6;--muted:#C9A79E;--line:#7A1A28;--aqua:#E8DCC3;--aqua2:#F3ECDD;--danger:#E8869A;--r:12px}
+  :root{color-scheme:light;--night:#E2DDDA;--surface:#EDE9E4;--surface2:#DDD6CF;--moon:#1E1A18;--muted:#6E5F58;--line:rgba(122,26,40,.28);--aqua:#7A1A28;--aqua2:#9B2233;--danger:#B33A50;--r:12px}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--night);color:var(--moon);font-family:"Jost",system-ui,sans-serif;font-weight:300;font-size:16px;line-height:1.5;padding:0 16px 80px}
   .wrap{max-width:640px;margin:0 auto}
@@ -22,7 +24,7 @@
   input:focus,textarea:focus,select:focus{outline:none;border-color:var(--aqua)}
   textarea{min-height:72px;resize:vertical}
   .row{display:flex;gap:12px}.row>*{flex:1}
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:999px;font-family:inherit;font-weight:500;font-size:14px;letter-spacing:.03em;padding:13px 20px;cursor:pointer;transition:.15s;background:var(--aqua);color:#3D0B15}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:999px;font-family:inherit;font-weight:500;font-size:14px;letter-spacing:.03em;padding:13px 20px;cursor:pointer;transition:.15s;background:var(--aqua);color:#F6EFE6}
   .btn:hover{background:var(--aqua2)}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--muted)}
@@ -44,19 +46,19 @@
   .li-btns button.del:hover{border-color:var(--danger);color:var(--danger)}
   .sec-title{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:30px 0 12px;border-top:1px solid var(--line);padding-top:24px}
   .msg{padding:11px 14px;border-radius:10px;font-size:13px;margin:12px 0;display:none}
-  .msg.ok{background:rgba(232,220,195,.12);color:var(--aqua2);display:block}
-  .msg.err{background:rgba(232,134,154,.12);color:var(--danger);display:block}
+  .msg.ok{background:rgba(122,26,40,.08);color:var(--aqua);display:block}
+  .msg.err{background:rgba(179,58,80,.10);color:var(--danger);display:block}
   .preview{margin-top:8px}
   .preview img{max-height:120px;border-radius:8px;border:1px solid var(--line)}
   .hint{font-size:11px;color:var(--muted);margin-top:5px}
-  .guide{background:rgba(232,220,195,.07);border:1px solid var(--line);border-radius:var(--r);margin-bottom:22px;overflow:hidden}
+  .guide{background:rgba(122,26,40,.05);border:1px solid var(--line);border-radius:var(--r);margin-bottom:22px;overflow:hidden}
   .guide summary{cursor:pointer;list-style:none;padding:14px 16px;font-size:14px;color:var(--aqua);font-weight:500;display:flex;align-items:center;justify-content:space-between}
   .guide summary::-webkit-details-marker{display:none}
   .guide summary::after{content:"›";font-size:20px;transition:transform .2s}
   .guide[open] summary::after{transform:rotate(90deg)}
   .guide .body{padding:2px 18px 18px}
   .guide ol{margin:0;padding-left:20px}
-  .guide li{font-size:13.5px;color:#E4D2DA;margin-bottom:9px;line-height:1.55}
+  .guide li{font-size:13.5px;color:#4A403B;margin-bottom:9px;line-height:1.55}
   .guide li b{color:var(--moon);font-weight:500}
   .guide .tips{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
   .guide .tips b{color:var(--aqua)}
