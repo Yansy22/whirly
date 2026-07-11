@@ -200,6 +200,23 @@
       <div class="sec-title">Your pieces</div>
       <div id="list"><div class="gate" style="padding:30px">Loading…</div></div>
 
+      <details class="acct" id="paySettings">
+        <summary>Payment details (shown at checkout)</summary>
+        <div class="who">Customers see these on the checkout page and transfer the total to this account.</div>
+        <div id="setMsg" class="msg"></div>
+        <label>Payment method</label>
+        <input id="setMethod" placeholder="EasyPaisa" />
+        <label>Account name</label>
+        <input id="setName" placeholder="e.g. Aasma Ghaffar" />
+        <label>Account number</label>
+        <input id="setNumber" placeholder="e.g. 03211234567" />
+        <label>Instructions shown to customers</label>
+        <textarea id="setInstr" placeholder="Please transfer the total amount to the account above, then upload a screenshot…"></textarea>
+        <div class="actions">
+          <button class="btn" id="setBtn">Save payment details</button>
+        </div>
+      </details>
+
       <details class="acct">
         <summary>Account &amp; password</summary>
         <div class="who" id="acctWho"></div>
@@ -295,6 +312,38 @@ function boot(){
   refresh();
   loadOrders();
   initAccount();
+  initSettings();
+}
+
+/* ---- payment settings (shop_settings table) ---- */
+const SET_KEYS={ method:"payment_method", name:"payment_account_name", number:"payment_account_number", instr:"payment_instructions" };
+async function initSettings(){
+  const { data, error } = await sb.from("shop_settings").select("key,value");
+  if(!error && data){
+    const map={}; data.forEach(r=>map[r.key]=r.value);
+    $("setMethod").value = map[SET_KEYS.method] || "";
+    $("setName").value   = map[SET_KEYS.name]   || "";
+    $("setNumber").value = map[SET_KEYS.number] || "";
+    $("setInstr").value  = map[SET_KEYS.instr]  || "";
+  }
+  // nudge the owner if payment details aren't filled in yet
+  if(!$("setName").value || !$("setNumber").value){ $("paySettings").setAttribute("open",""); }
+
+  $("setBtn").addEventListener("click", async function(){
+    const btn=this; const m=$("setMsg");
+    btn.disabled=true; btn.textContent="Saving…";
+    const rows=[
+      { key:SET_KEYS.method, value:$("setMethod").value.trim() },
+      { key:SET_KEYS.name,   value:$("setName").value.trim() },
+      { key:SET_KEYS.number, value:$("setNumber").value.trim() },
+      { key:SET_KEYS.instr,  value:$("setInstr").value.trim() },
+    ];
+    const { error } = await sb.from("shop_settings").upsert(rows,{onConflict:"key"});
+    btn.disabled=false; btn.textContent="Save payment details";
+    if(error){ m.textContent="Couldn't save: "+error.message; m.className="msg err"; return; }
+    m.textContent="Saved. Customers will see these at checkout."; m.className="msg ok";
+    setTimeout(()=>{m.className="msg";},3500);
+  });
 }
 
 /* ---- account: show who's logged in + change password ---- */
