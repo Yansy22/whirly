@@ -178,10 +178,16 @@
             <input id="fPrice" type="number" inputmode="numeric" min="0" placeholder="650" />
           </div>
           <div>
-            <label>Short spec line (optional)</label>
-            <input id="fSpec" placeholder="Silver-tone · hook fitting" />
+            <label>Availability</label>
+            <select id="fStock">
+              <option value="true">In stock</option>
+              <option value="false">Out of stock</option>
+            </select>
           </div>
         </div>
+
+        <label>Short spec line (optional)</label>
+        <input id="fSpec" placeholder="Silver-tone · hook fitting" />
 
         <label>Description (optional)</label>
         <textarea id="fDesc" placeholder="A sharp little star resting on a freshwater pearl."></textarea>
@@ -408,6 +414,7 @@ async function refresh(){
         '<div class="t">'+esc(p.tagline||p.name||"Untitled")+'</div>'+
         '<div class="s">'+esc(p.name||"")+'</div>'+
         (p.price!=null&&p.price!=="" ? '<div class="p">'+esc(money(p.price))+'</div>' : '')+
+        (p.in_stock===false ? '<div class="p" style="color:var(--danger)">OUT OF STOCK</div>' : '')+
       '</div>'+
       '<div class="li-btns">'+
         '<button class="edit">Edit</button>'+
@@ -421,7 +428,7 @@ async function refresh(){
 function resetForm(){
   $("editId").value=""; $("existingImage").value="";
   $("fCategory").value="earrings"; $("fTagline").value=""; $("fName").value="";
-  $("fPrice").value=""; $("fSpec").value=""; $("fDesc").value=""; $("fImage").value=""; $("preview").innerHTML="";
+  $("fPrice").value=""; $("fStock").value="true"; $("fSpec").value=""; $("fDesc").value=""; $("fImage").value=""; $("preview").innerHTML="";
   $("formTitle").textContent="Add a new piece";
   $("saveBtn").textContent="Save piece";
   $("resetBtn").style.display="none";
@@ -430,7 +437,7 @@ function startEdit(p){
   $("editId").value=p.id; $("existingImage").value=p.image_path||"";
   $("fCategory").value=p.category_key||"earrings";
   $("fTagline").value=p.tagline||""; $("fName").value=p.name||"";
-  $("fPrice").value=(p.price!=null?p.price:""); $("fSpec").value=p.spec||""; $("fDesc").value=p.description||"";
+  $("fPrice").value=(p.price!=null?p.price:""); $("fStock").value=(p.in_stock===false?"false":"true"); $("fSpec").value=p.spec||""; $("fDesc").value=p.description||"";
   $("fImage").value="";
   $("preview").innerHTML=p.image_path?'<img src="'+esc(p.image_path)+'">':"";
   $("formTitle").textContent="Edit piece";
@@ -463,6 +470,7 @@ $("saveBtn").addEventListener("click",async function(){
       category_key:$("fCategory").value,
       tagline, name:$("fName").value.trim(),
       price: priceVal===""? null : Number(priceVal),
+      in_stock: $("fStock").value==="true",
       spec:$("fSpec").value.trim(), description:$("fDesc").value.trim(),
       image_path,
     };
