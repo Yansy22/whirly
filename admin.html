@@ -69,7 +69,13 @@
   .preview img{max-height:110px;border-radius:8px;border:1px solid var(--line);margin-top:7px}
   .hint{font-size:11px;color:var(--muted);margin-top:4px}
 
-  .crow{display:flex;gap:11px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px;margin-bottom:10px}
+  .crow{display:flex;gap:11px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px;margin-bottom:10px;transition:opacity .15s, transform .15s}
+  .crow.dragging{opacity:.45;transform:scale(.99)}
+  .crow.over{border-color:var(--aqua);border-style:dashed;background:rgba(122,26,40,.05)}
+  .crow .grip{flex:none;width:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:grab;color:var(--muted);touch-action:none;padding:6px 0}
+  .crow .grip:active{cursor:grabbing}
+  .crow .grip span{display:block;width:14px;height:2px;border-radius:2px;background:currentColor;opacity:.55}
+  .drag-hint{font-size:12px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px}
   .crow .cov{width:54px;height:54px;border-radius:9px;object-fit:cover;background:var(--surface2);flex:none}
   .crow .cov-ph{width:54px;height:54px;border-radius:9px;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--aqua);flex:none;font-size:18px}
   .crow .ci{flex:1;min-width:0}
@@ -162,12 +168,24 @@
     </section>
 
     <section id="paneCategories" style="display:none">
-      <p class="sub">Rename, reorder, add a cover photo, or create a new category. Covers show on your homepage.</p>
+      <p class="sub">Rename, add a cover photo, or create a new category. Covers show on your homepage.</p>
+      <div class="drag-hint">↕ Drag the handle on the left to change the order customers see.</div>
       <div id="cats"><div class="empty">Loading…</div></div>
       <button class="btn block" id="addCatBtn" style="margin-top:14px">+ New category</button>
     </section>
 
     <section id="paneSettings" style="display:none">
+      <div class="card">
+        <h3>Brand logo</h3>
+        <p class="desc">Shown on your website header, and used as a placeholder wherever a photo is missing.</p>
+        <div id="logoMsg" class="msg"></div>
+        <div class="preview" id="logoPreview"></div>
+        <label>Upload a new logo</label>
+        <input type="file" id="logoFile" accept="image/*" />
+        <div class="hint">A PNG with a transparent background works best.</div>
+        <div class="actions"><button class="btn" id="logoBtn">Save logo</button></div>
+      </div>
+
       <div class="card">
         <h3>Payment details</h3>
         <p class="desc">Customers see these at checkout and transfer the total to this account.</p>
@@ -242,8 +260,6 @@
     </div>
     <label>Description (optional)</label>
     <input id="cBlurb" placeholder="Charms on a chain — something to keep close." />
-    <label>Display order</label>
-    <input id="cOrder" type="number" inputmode="numeric" placeholder="1" />
     <label>Cover photo (shown on homepage)</label>
     <input type="file" id="cCover" accept="image/*" />
     <div class="preview" id="cPreview"></div>
@@ -275,6 +291,14 @@ function flash(t,ok){const m=$("msg");m.textContent=t;m.className="msg "+(ok===f
 
 let CATS=[], PRODUCTS=[], ORDERS=[];
 let pQuery="", pCat="all", oFilter="all";
+let LOGO="";
+
+/* logo placeholder — used wherever an image is missing */
+function ph(cls,fallback){
+  return LOGO
+    ? '<div class="'+cls+'"><img src="'+esc(LOGO)+'" alt="" style="width:60%;height:60%;object-fit:contain;opacity:.55"></div>'
+    : '<div class="'+cls+'">'+esc(fallback)+'</div>';
+}
 
 async function checkSession(){
   const { data } = await sb.auth.getSession();
@@ -327,17 +351,77 @@ function renderCats(){
   const box=$("cats");
   if(!CATS.length){box.innerHTML='<div class="empty">No categories yet.</div>';return;}
   box.innerHTML="";
-  CATS.forEach(function(c){
+  CATS.forEach(function(c,idx){
     const count=PRODUCTS.filter(function(p){return p.category_key===c.key;}).length;
-    const el=document.createElement("div"); el.className="crow";
-    el.innerHTML=(c.cover_path?'<img class="cov" src="'+esc(c.cover_path)+'" alt="">':'<div class="cov-ph">+</div>')+
+    const el=document.createElement("div"); el.className="crow"; el.draggable=true; el.dataset.idx=idx;
+    el.innerHTML='<div class="grip" title="Drag to reorder"><span></span><span></span><span></span></div>'+
+      (c.cover_path?'<img class="cov" src="'+esc(c.cover_path)+'" alt="">':ph("cov-ph","+"))+
       '<div class="ci"><div class="l">'+esc(c.label)+'</div><div class="k">'+esc(c.key)+'</div>'+
       '<div class="c">'+count+(count===1?" piece":" pieces")+(c.cover_path?"":" · no cover photo")+'</div></div>'+
       '<div class="cb"><button class="e">Edit</button><button class="d">Delete</button></div>';
     el.querySelector(".e").onclick=function(){openCat(c);};
     el.querySelector(".d").onclick=function(){delCat(c,count);};
+    wireDrag(el);
     box.appendChild(el);
   });
+}
+
+/* drag to reorder */
+let dragFrom=null;
+function wireDrag(el){
+  el.addEventListener("dragstart",function(e){
+    dragFrom=Number(el.dataset.idx);
+    el.classList.add("dragging");
+    e.dataTransfer.effectAllowed="move";
+    try{ e.dataTransfer.setData("text/plain",String(dragFrom)); }catch(_){}
+  });
+  el.addEventListener("dragend",function(){
+    el.classList.remove("dragging");
+    document.querySelectorAll(".crow").forEach(function(r){r.classList.remove("over");});
+  });
+  el.addEventListener("dragover",function(e){
+    e.preventDefault(); e.dataTransfer.dropEffect="move";
+    if(Number(el.dataset.idx)!==dragFrom) el.classList.add("over");
+  });
+  el.addEventListener("dragleave",function(){ el.classList.remove("over"); });
+  el.addEventListener("drop",function(e){
+    e.preventDefault(); el.classList.remove("over");
+    const to=Number(el.dataset.idx);
+    if(dragFrom===null || dragFrom===to) return;
+    reorder(dragFrom,to);
+  });
+
+  /* touch support (phones) */
+  const grip=el.querySelector(".grip");
+  grip.addEventListener("touchstart",function(){ dragFrom=Number(el.dataset.idx); el.classList.add("dragging"); },{passive:true});
+  grip.addEventListener("touchmove",function(e){
+    const t=e.touches[0];
+    const under=document.elementFromPoint(t.clientX,t.clientY);
+    const row=under&&under.closest(".crow");
+    document.querySelectorAll(".crow").forEach(function(r){r.classList.remove("over");});
+    if(row&&Number(row.dataset.idx)!==dragFrom) row.classList.add("over");
+  },{passive:true});
+  grip.addEventListener("touchend",function(e){
+    el.classList.remove("dragging");
+    const t=e.changedTouches[0];
+    const under=document.elementFromPoint(t.clientX,t.clientY);
+    const row=under&&under.closest(".crow");
+    document.querySelectorAll(".crow").forEach(function(r){r.classList.remove("over");});
+    if(row){ const to=Number(row.dataset.idx); if(dragFrom!==null&&dragFrom!==to) reorder(dragFrom,to); }
+    dragFrom=null;
+  });
+}
+async function reorder(from,to){
+  const moved=CATS.splice(from,1)[0];
+  CATS.splice(to,0,moved);
+  CATS.forEach(function(c,i){ c.sort_order=i+1; });   // 항상 1,2,3… 로 다시 매김 (중복 없음)
+  renderCats();
+  const rows=CATS.map(function(c){
+    return { key:c.key, label:c.label, blurb:c.blurb, cover_path:c.cover_path, sort_order:c.sort_order };
+  });
+  const { error } = await sb.from("categories").upsert(rows,{onConflict:"key"});
+  if(error){ flash("Couldn't save the new order: "+error.message,false); loadCats(); return; }
+  flash("Order updated.");
 }
 function openCat(c){
   $("cMsg").className="msg";
@@ -348,7 +432,6 @@ function openCat(c){
   $("cKey").value=c?c.key:"";
   $("cKeyWrap").style.display=c?"none":"block";
   $("cBlurb").value=c?(c.blurb||""):"";
-  $("cOrder").value=c?c.sort_order:(CATS.length+1);
   $("cCover").value="";
   $("cPreview").innerHTML=(c&&c.cover_path)?'<img src="'+esc(c.cover_path)+'">':"";
   $("cModal").classList.add("open");
@@ -372,7 +455,9 @@ $("cSave").addEventListener("click",async function(){
     let cover=$("cExistingCover").value;
     const f=$("cCover").files&&$("cCover").files[0];
     if(f) cover=await uploadTo(CONFIG.bucket,f,"cat_");
-    const rec={key:key,label:label,blurb:$("cBlurb").value.trim(),cover_path:cover,sort_order:Number($("cOrder").value)||0};
+    const existing=CATS.find(function(x){return x.key===key;});
+    const rec={key:key,label:label,blurb:$("cBlurb").value.trim(),cover_path:cover,
+               sort_order: existing ? existing.sort_order : (CATS.length+1)};
     const { error } = await sb.from("categories").upsert(rec,{onConflict:"key"});
     if(error) throw error;
     $("cModal").classList.remove("open");
@@ -408,7 +493,7 @@ function renderProducts(){
   const grid=box.querySelector(".pgrid");
   list.forEach(function(p){
     const el=document.createElement("div"); el.className="pcard";
-    const media=p.image_path?'<img src="'+esc(p.image_path)+'" alt="">':'<div class="ph">'+((p.tagline||p.name||"?").charAt(0).toUpperCase())+'</div>';
+    const media=p.image_path?'<img src="'+esc(p.image_path)+'" alt="">':ph("ph",(p.tagline||p.name||"?").charAt(0).toUpperCase());
     el.innerHTML='<div class="ph-wrap">'+media+(p.in_stock===false?'<span class="oos">Out of stock</span>':'')+'</div>'+
       '<div class="body"><div class="cat">'+esc(catLabel(p.category_key))+'</div>'+
       '<div class="t">'+esc(p.tagline||p.name||"Untitled")+'</div>'+
@@ -542,12 +627,37 @@ function renderOrders(){
 }
 
 /* settings */
-const SK={method:"payment_method",name:"payment_account_name",number:"payment_account_number",instr:"payment_instructions"};
+const SK={method:"payment_method",name:"payment_account_name",number:"payment_account_number",instr:"payment_instructions",logo:"brand_logo_url"};
 async function initSettings(){
   const { data } = await sb.from("shop_settings").select("key,value");
   const map={}; (data||[]).forEach(function(r){map[r.key]=r.value;});
   $("setMethod").value=map[SK.method]||""; $("setName").value=map[SK.name]||"";
   $("setNumber").value=map[SK.number]||""; $("setInstr").value=map[SK.instr]||"";
+
+  LOGO = map[SK.logo]||"";
+  $("logoPreview").innerHTML = LOGO ? '<img src="'+esc(LOGO)+'" alt="logo">' : '<p class="hint">No logo uploaded yet.</p>';
+  renderCats(); renderProducts();
+
+  $("logoFile").addEventListener("change",function(){
+    const f=this.files&&this.files[0];
+    if(f) $("logoPreview").innerHTML='<img src="'+URL.createObjectURL(f)+'" alt="logo">';
+  });
+  $("logoBtn").addEventListener("click",async function(){
+    const m=$("logoMsg"); const f=$("logoFile").files&&$("logoFile").files[0];
+    if(!f){ m.textContent="Please choose an image first."; m.className="msg err"; return; }
+    this.disabled=true; this.textContent="Uploading…";
+    try{
+      const url=await uploadTo(CONFIG.bucket,f,"logo_");
+      const { error } = await sb.from("shop_settings").upsert([{key:SK.logo,value:url}],{onConflict:"key"});
+      if(error) throw error;
+      LOGO=url; $("logoFile").value="";
+      renderCats(); renderProducts();
+      m.textContent="Logo saved. It'll show on your website too."; m.className="msg ok";
+      setTimeout(function(){m.className="msg";},3200);
+    }catch(e){ m.textContent="Couldn't save: "+(e.message||e); m.className="msg err"; }
+    finally{ this.disabled=false; this.textContent="Save logo"; }
+  });
+
   $("setBtn").addEventListener("click",async function(){
     const m=$("setMsg"); this.disabled=true; this.textContent="Saving…";
     const rows=[{key:SK.method,value:$("setMethod").value.trim()},{key:SK.name,value:$("setName").value.trim()},
