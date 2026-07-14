@@ -207,6 +207,16 @@
   .oos-badge{position:absolute;top:10px;left:10px;background:rgba(34,29,26,.78);color:#F6EFE6;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:4px 11px;border-radius:999px;z-index:2}
   .thumb.oos img{filter:grayscale(.6);opacity:.72}
   .order.disabled{background:var(--surface2);color:var(--muted);cursor:not-allowed;box-shadow:none}
+
+  /* ---- homepage category grid (cover photos) ---- */
+  .cat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;padding:34px 0 20px}
+  @media(min-width:760px){.cat-grid{grid-template-columns:repeat(3,1fr);gap:20px}}
+  .cat-card{display:flex;flex-direction:column;text-decoration:none;color:inherit;background:var(--surface);border-radius:var(--r);overflow:hidden;box-shadow:0 1px 3px rgba(34,29,26,.10), 0 6px 18px -8px rgba(34,29,26,.12);transition:transform .3s, box-shadow .3s}
+  @media(hover:hover){.cat-card:hover{transform:translateY(-3px);box-shadow:0 2px 4px rgba(34,29,26,.10), 0 14px 30px -10px rgba(122,26,40,.28)}}
+  .cat-card .cc-media{aspect-ratio:1/1;background:var(--surface);position:relative}
+  .cat-card .cc-media img{width:100%;height:100%;object-fit:cover}
+  .cat-card .cc-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:"Cormorant Garamond",serif;font-size:40px;color:var(--aqua)}
+  .cat-card .cc-name{background:#FBFAF8;padding:13px 10px;text-align:center;font-family:"Cormorant Garamond",serif;font-size:17px;letter-spacing:.02em;color:var(--moon)}
 </style>
 </head>
 <body>
@@ -361,22 +371,14 @@ const BRAND = {
   footerLeft:  "\u00a9 Whirly Co \u2014 handmade",
   footerRight: "A little studio \u00b7 made by hand in Islamabad",
 
-  categories: [
-    { key:"earrings",  label:"Earrings",  blurb:"Wire, crystal, and pearl \u2014 little symbols for your ears." },
-    { key:"necklaces", label:"Necklaces", blurb:"Charms on a chain \u2014 something to keep close." },
-    { key:"pendants",  label:"Pendants",  blurb:"Small charms to wear close to the heart." },
-    { key:"rings",     label:"Rings",     blurb:"Delicate bands and little details for your hands." },
-    { key:"cuffs",     label:"Arm Cuffs", blurb:"Bold, hand-shaped pieces for the wrist." },
-    { key:"others",    label:"Others",    blurb:"A few one-of-a-kind pieces that don't fit a category." },
-  ],
-  samplesOnHome: 4,
+  // 카테고리는 이제 관리자 페이지에서 관리합니다 (Supabase categories 테이블)
   theme: {},
 };
 
 /* ============================  ENGINE  =========================== */
 const $=id=>document.getElementById(id);
 const igUrl=()=>"https://instagram.com/"+BRAND.instagram;
-const catMeta=k=>BRAND.categories.find(c=>c.key===k);
+
 const catByKey=k=>CATALOG.find(c=>c.key===k);
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));}
 
@@ -400,9 +402,6 @@ function applyBranding(){
   $("footLeft").textContent  = BRAND.footerLeft;
   $("footRight").textContent = BRAND.footerRight;
   $("igTop").href = igUrl();
-  $("catNav").innerHTML = (BRAND.categories||[]).map(c=>
-    '<a class="cat-tile" href="#/c/'+esc(c.key)+'">'+esc(c.label)+'</a>'
-  ).join("");
 }
 
 const { createClient } = window.supabase;
@@ -422,18 +421,27 @@ function pay(field, fallback){
 }
 
 async function loadCatalog(){
-  const { data, error } = await sb.from("products").select("*")
-    .order("sort_order",{ascending:true}).order("id",{ascending:true});
-  if(error){ console.error(error);
+  const cres = await sb.from("categories").select("*").order("sort_order").order("key");
+  const pres = await sb.from("products").select("*").order("sort_order",{ascending:true}).order("id",{ascending:true});
+  if(pres.error || cres.error){ console.error(pres.error||cres.error);
     $("homeCats").innerHTML='<div class="state">Couldn\'t load the collection. Please refresh in a moment.</div>'; return; }
-  const groups={}; (data||[]).forEach(p=>{const k=(p.category_key||"other").trim();(groups[k]=groups[k]||[]).push(p);});
-  const ordered=BRAND.categories.map(c=>c.key).filter(k=>groups[k]);
-  const extras=Object.keys(groups).filter(k=>!ordered.includes(k));
-  CATALOG=[...ordered,...extras].map(k=>{
-    const m=catMeta(k);
-    return { key:k, label:(m&&m.label)||(k.charAt(0).toUpperCase()+k.slice(1)), blurb:(m&&m.blurb)||"", products:groups[k] };
+  const cats = cres.data||[];
+  const groups={}; (pres.data||[]).forEach(function(p){const k=(p.category_key||"others").trim();(groups[k]=groups[k]||[]).push(p);});
+  CATALOG = cats.map(function(c){
+    return { key:c.key, label:c.label, blurb:c.blurb||"", cover:c.cover_path||"", products:groups[c.key]||[] };
   });
+  // any product whose category was removed still shows up
+  Object.keys(groups).forEach(function(k){
+    if(!CATALOG.find(function(c){return c.key===k;}))
+      CATALOG.push({ key:k, label:k.charAt(0).toUpperCase()+k.slice(1), blurb:"", cover:"", products:groups[k] });
+  });
+  applyCategoryNav();
   renderHome(); route();
+}
+function applyCategoryNav(){
+  $("catNav").innerHTML = CATALOG.map(function(c){
+    return '<a class="cat-tile" href="#/c/'+esc(c.key)+'">'+esc(c.label)+'</a>';
+  }).join("");
 }
 
 function orderUrlFor(p){
@@ -466,17 +474,23 @@ function productCard(catKey,p,i){
 function renderHome(){
   const wrap=$("homeCats"); wrap.innerHTML="";
   if(!CATALOG.length){ wrap.innerHTML='<div class="state">No pieces yet \u2014 check back soon.</div>'; return; }
+  const grid=document.createElement("div"); grid.className="cat-grid";
   CATALOG.forEach(function(cat){
-    const block=document.createElement("section"); block.className="cat-block";
-    const head=document.createElement("div"); head.className="cat-head";
-    const h2=document.createElement("h2"); h2.textContent=cat.label;
-    const va=document.createElement("a"); va.className="view-all"; va.href="#/c/"+cat.key; va.textContent="View all "+cat.products.length+" \u2192";
-    head.append(h2,va);
-    const blurb=document.createElement("p"); blurb.className="cat-blurb"; blurb.textContent=cat.blurb||"";
-    const grid=document.createElement("div"); grid.className="grid";
-    cat.products.slice(0,BRAND.samplesOnHome).forEach(function(p,i){grid.appendChild(productCard(cat.key,p,i));});
-    block.append(head,blurb,grid); wrap.appendChild(block);
+    const a=document.createElement("a"); a.className="cat-card"; a.href="#/c/"+cat.key;
+    const first=cat.products[0];
+    const src=cat.cover || (first&&first.image_path) || "";
+    const media=document.createElement("div"); media.className="cc-media";
+    if(src){
+      const img=document.createElement("img"); img.src=src; img.alt=cat.label; img.loading="lazy";
+      img.onerror=function(){ media.innerHTML='<div class="cc-ph">'+cat.label.charAt(0)+'</div>'; };
+      media.appendChild(img);
+    }else{
+      media.innerHTML='<div class="cc-ph">'+esc(cat.label.charAt(0))+'</div>';
+    }
+    const nm=document.createElement("div"); nm.className="cc-name"; nm.textContent=cat.label;
+    a.append(media,nm); grid.appendChild(a);
   });
+  wrap.appendChild(grid);
 }
 function renderCategory(key){
   const cat=catByKey(key); if(!cat){location.hash="#/";return;}
