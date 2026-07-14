@@ -70,6 +70,7 @@
   .thumb img{width:100%;height:100%;object-fit:cover}
   @media(hover:hover){.card:hover .thumb{transform:translateY(-3px);box-shadow:0 2px 4px rgba(34,29,26,.10), 0 14px 30px -10px rgba(122,26,40,.28)}}
   .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--surface);font-family:"Cormorant Garamond",serif;font-size:42px;color:var(--aqua)}
+  .ph img,.cc-ph img{display:block}
   .c-tag{font-family:"Cormorant Garamond",serif;font-style:italic;font-size:17.5px;color:var(--aqua);margin:14px 0 2px;line-height:1.25}
   .c-name{font-family:"Jost",sans-serif;font-weight:300;font-size:12.5px;letter-spacing:.04em;color:var(--muted)}
 
@@ -417,6 +418,7 @@ async function loadSettings(){
   if(SETTINGS.brand_logo_url) BRAND.logoUrl = SETTINGS.brand_logo_url;
   if(SETTINGS.brand_qr_url)   BRAND.qrUrl   = SETTINGS.brand_qr_url;
   applyBranding();
+  if(CATALOG.length){ renderHome(); route(); }   // logo arrived — redraw placeholders
 }
 function pay(field, fallback){
   const v = SETTINGS["payment_"+field];
@@ -451,12 +453,23 @@ function orderUrlFor(p){
   const t="Hi "+BRAND.shopName+"! I'm interested in the \""+(p.tagline||p.name)+"\" \u2014 could you tell me the price and how to order?";
   return BRAND.whatsapp ? "https://wa.me/"+BRAND.whatsapp+"?text="+encodeURIComponent(t) : igUrl();
 }
+/* placeholder shown when no photo exists — uses the brand logo, falls back to a letter */
+function phMarkup(cls, label){
+  const t = String(label||"?").charAt(0).toUpperCase();
+  return BRAND.logoUrl
+    ? '<div class="'+cls+'"><img src="'+esc(BRAND.logoUrl)+'" alt="" style="width:58%;height:58%;object-fit:contain;opacity:.5"></div>'
+    : '<div class="'+cls+'">'+esc(t)+'</div>';
+}
 function mediaNode(p){
   const d=document.createElement("div"); const src=String(p.image_path||"").trim();
-  if(src){ const img=document.createElement("img"); img.src=src; img.alt=p.tagline||p.name||""; img.loading="lazy";
-    img.onerror=function(){d.innerHTML="";const ph=document.createElement("div");ph.className="ph";ph.textContent=((p.tagline||p.name||"?").charAt(0)).toUpperCase();d.appendChild(ph);};
+  const label=p.tagline||p.name||"?";
+  if(src){
+    const img=document.createElement("img"); img.src=src; img.alt=label; img.loading="lazy";
+    img.onerror=function(){ d.innerHTML=phMarkup("ph",label); };
     d.appendChild(img);
-  }else{ const ph=document.createElement("div");ph.className="ph";ph.textContent=((p.tagline||p.name||"?").charAt(0)).toUpperCase();d.appendChild(ph); }
+  }else{
+    d.innerHTML=phMarkup("ph",label);
+  }
   return d;
 }
 const money=n=>(n==null||n==="")?"":BRAND.currency+" "+Number(n).toLocaleString();
@@ -485,10 +498,10 @@ function renderHome(){
     const media=document.createElement("div"); media.className="cc-media";
     if(src){
       const img=document.createElement("img"); img.src=src; img.alt=cat.label; img.loading="lazy";
-      img.onerror=function(){ media.innerHTML='<div class="cc-ph">'+cat.label.charAt(0)+'</div>'; };
+      img.onerror=function(){ media.innerHTML=phMarkup("cc-ph",cat.label); };
       media.appendChild(img);
     }else{
-      media.innerHTML='<div class="cc-ph">'+esc(cat.label.charAt(0))+'</div>';
+      media.innerHTML=phMarkup("cc-ph",cat.label);
     }
     const nm=document.createElement("div"); nm.className="cc-name"; nm.textContent=cat.label;
     a.append(media,nm); grid.appendChild(a);
@@ -597,7 +610,7 @@ function renderCart(){
   c.forEach(it=>{
     const media = it.image_path
       ? '<img src="'+esc(it.image_path)+'" alt="">'
-      : '<div class="ph">'+((it.tagline||"?").charAt(0).toUpperCase())+'</div>';
+      : phMarkup("ph", it.tagline);
     html+='<div class="cart-row" data-id="'+it.id+'">'+media+
       '<div class="cart-info"><div class="t">'+esc(it.tagline)+'</div>'+
       '<div class="pr">'+esc(money(it.price))+' each</div>'+
