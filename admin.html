@@ -160,7 +160,10 @@
     </section>
 
     <section id="paneProducts" style="display:none">
-      <button class="btn block" id="markAllOosBtn" style="margin-bottom:12px">Mark all pieces as Out of Stock</button>
+      <div class="row" style="margin-bottom:12px">
+        <button class="btn" id="markAllOosBtn">Mark all as Out of Stock</button>
+        <button class="btn ghost" id="markAllInBtn">Mark all as In Stock</button>
+      </div>
       <div class="controls">
         <input id="pSearch" placeholder="Search pieces…" />
         <select id="pFilter"></select>
@@ -498,9 +501,18 @@ $("markAllOosBtn").addEventListener("click",async function(){
   if(!confirm("Mark ALL pieces as Out of Stock? Use this after a pop-up/event sellout.")) return;
   this.disabled=true; this.textContent="Updating…";
   const { error } = await sb.from("products").update({in_stock:false}).neq("id",0); // neq(id,0): WHERE 없는 UPDATE는 Supabase가 막아서 항상 참인 조건으로 우회
-  this.disabled=false; this.textContent="Mark all pieces as Out of Stock";
+  this.disabled=false; this.textContent="Mark all as Out of Stock";
   if(error){ flash("Couldn't update: "+error.message,false); return; }
   flash("All pieces marked out of stock.");
+  loadProducts();
+});
+$("markAllInBtn").addEventListener("click",async function(){
+  if(!confirm("Mark ALL pieces as In Stock? Use this once restocked.")) return;
+  this.disabled=true; this.textContent="Updating…";
+  const { error } = await sb.from("products").update({in_stock:true}).neq("id",0);
+  this.disabled=false; this.textContent="Mark all as In Stock";
+  if(error){ flash("Couldn't update: "+error.message,false); return; }
+  flash("All pieces marked in stock.");
   loadProducts();
 });
 function catLabel(k){const c=CATS.find(function(x){return x.key===k;});return c?c.label:k;}
