@@ -46,6 +46,7 @@
   .pcard img{width:100%;height:100%;object-fit:cover}
   .pcard .ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--aqua);font-family:"Cormorant Garamond",serif;font-size:34px}
   .pcard .oos{position:absolute;top:7px;left:7px;background:rgba(30,26,24,.8);color:#F6EFE6;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px}
+  .pcard .sale-badge{position:absolute;top:7px;right:7px;background:var(--aqua);color:#F6EFE6;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px}
   .pcard .body{padding:9px 10px 10px;flex:1;display:flex;flex-direction:column;gap:2px}
   .pcard .t{font-family:"Cormorant Garamond",serif;font-style:italic;font-size:15px;color:var(--aqua);line-height:1.25}
   .pcard .cat{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -246,6 +247,21 @@
         <select id="fStock"><option value="true">In stock</option><option value="false">Out of stock</option></select>
       </div>
     </div>
+    
+    <!-- SALE 옵션 추가 섹션 -->
+    <div class="row" style="align-items:center; margin-top:10px;">
+      <div>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; color:var(--aqua);">
+          <input type="checkbox" id="fIsSale" style="width:auto; margin:0; cursor:pointer;" /> 
+          Mark as On Sale
+        </label>
+      </div>
+      <div id="fSalePriceWrap" style="display:none;">
+        <label style="margin-top:0;">Sale Price (PKR)</label>
+        <input id="fSalePrice" type="number" inputmode="numeric" min="0" placeholder="500" />
+      </div>
+    </div>
+
     <label>Short spec line (optional)</label>
     <input id="fSpec" placeholder="Silver-tone · hook fitting" />
     <label>Description (optional)</label>
@@ -308,7 +324,6 @@ let CATS=[], PRODUCTS=[], ORDERS=[];
 let pQuery="", pCat="all", oFilter="all";
 let LOGO="";
 
-/* logo placeholder — used wherever an image is missing */
 function ph(cls,fallback){
   return LOGO
     ? '<div class="'+cls+'"><img src="'+esc(LOGO)+'" alt="" style="width:60%;height:60%;object-fit:contain;opacity:.55"></div>'
@@ -339,6 +354,12 @@ function boot(){
   document.querySelectorAll(".tab").forEach(function(t){ t.addEventListener("click",function(){switchTab(t.getAttribute("data-tab"));}); });
   $("pSearch").addEventListener("input",function(){pQuery=this.value.toLowerCase().trim();renderProducts();});
   $("pFilter").addEventListener("change",function(){pCat=this.value;renderProducts();});
+  
+  // 세일 가격 토글 이벤트
+  $("fIsSale").addEventListener("change", function(){
+    $("fSalePriceWrap").style.display = this.checked ? "block" : "none";
+  });
+
   initSettings(); initAccount(); loadAll();
 }
 function switchTab(name){
@@ -352,7 +373,6 @@ function switchTab(name){
 }
 async function loadAll(){ await loadCats(); await loadProducts(); await loadOrders(); }
 
-/* categories */
 async function loadCats(){
   const { data, error } = await sb.from("categories").select("*").order("sort_order").order("key");
   if(error){$("cats").innerHTML='<div class="empty">Error: '+esc(error.message)+'</div>';return;}
@@ -381,7 +401,6 @@ function renderCats(){
   });
 }
 
-/* drag to reorder */
 let dragFrom=null;
 function wireDrag(el){
   el.addEventListener("dragstart",function(e){
@@ -406,7 +425,6 @@ function wireDrag(el){
     reorder(dragFrom,to);
   });
 
-  /* touch support (phones) */
   const grip=el.querySelector(".grip");
   grip.addEventListener("touchstart",function(){ dragFrom=Number(el.dataset.idx); el.classList.add("dragging"); },{passive:true});
   grip.addEventListener("touchmove",function(e){
@@ -429,7 +447,7 @@ function wireDrag(el){
 async function reorder(from,to){
   const moved=CATS.splice(from,1)[0];
   CATS.splice(to,0,moved);
-  CATS.forEach(function(c,i){ c.sort_order=i+1; });   // 항상 1,2,3… 로 다시 매김 (중복 없음)
+  CATS.forEach(function(c,i){ c.sort_order=i+1; });  
   renderCats();
   const rows=CATS.map(function(c){
     return { key:c.key, label:c.label, blurb:c.blurb, cover_path:c.cover_path, sort_order:c.sort_order };
@@ -489,9 +507,9 @@ async function delCat(c,count){
   flash("Category deleted."); loadCats();
 }
 
-/* products */
 async function loadProducts(){
-  const { data, error } = await sb.from("products").select("*").order("category_key").order("sort_order").order("id");
+  // 관리자 화면에서도 신상품이 위에 오도록 created_at 기준 정렬 추가
+  const { data, error } = await sb.from("products").select("*").order("category_key").order("created_at", {ascending:false});
   if(error){$("products").innerHTML='<div class="empty">Error: '+esc(error.message)+'</div>';return;}
   PRODUCTS=data||[];
   $("nProducts").textContent="("+PRODUCTS.length+")";
@@ -500,7 +518,7 @@ async function loadProducts(){
 $("markAllOosBtn").addEventListener("click",async function(){
   if(!confirm("Mark ALL pieces as Out of Stock? Use this after a pop-up/event sellout.")) return;
   this.disabled=true; this.textContent="Updating…";
-  const { error } = await sb.from("products").update({in_stock:false}).neq("id",0); // neq(id,0): WHERE 없는 UPDATE는 Supabase가 막아서 항상 참인 조건으로 우회
+  const { error } = await sb.from("products").update({in_stock:false}).neq("id",0); 
   this.disabled=false; this.textContent="Mark all as Out of Stock";
   if(error){ flash("Couldn't update: "+error.message,false); return; }
   flash("All pieces marked out of stock.");
@@ -527,10 +545,12 @@ function renderProducts(){
   list.forEach(function(p){
     const el=document.createElement("div"); el.className="pcard";
     const media=p.image_path?'<img src="'+esc(p.image_path)+'" alt="">':ph("ph",(p.tagline||p.name||"?").charAt(0).toUpperCase());
-    el.innerHTML='<div class="ph-wrap">'+media+(p.in_stock===false?'<span class="oos">Out of stock</span>':'')+'</div>'+
+    const saleBadge = p.is_sale ? '<span class="sale-badge">SALE</span>' : '';
+    
+    el.innerHTML='<div class="ph-wrap">'+media+(p.in_stock===false?'<span class="oos">Out of stock</span>':saleBadge)+'</div>'+
       '<div class="body"><div class="cat">'+esc(catLabel(p.category_key))+'</div>'+
       '<div class="t">'+esc(p.tagline||p.name||"Untitled")+'</div>'+
-      '<div class="pr">'+(p.price!=null&&p.price!==""?esc(money(p.price)):'<span style="color:var(--danger)">No price</span>')+'</div></div>'+
+      '<div class="pr">'+(p.price!=null&&p.price!==""?(p.is_sale?'<s style="color:var(--muted); font-size:11px;">'+esc(money(p.price))+'</s> '+esc(money(p.sale_price)):esc(money(p.price))):'<span style="color:var(--danger)">No price</span>')+'</div></div>'+
       '<div class="btns"><button class="e">Edit</button><button class="d">Delete</button></div>';
     el.querySelector(".e").onclick=function(){openProduct(p);};
     el.querySelector(".d").onclick=function(){delProduct(p);};
@@ -546,6 +566,12 @@ function openProduct(p){
   $("fName").value=p?(p.name||""):"";
   $("fPrice").value=(p&&p.price!=null)?p.price:"";
   $("fStock").value=(p&&p.in_stock===false)?"false":"true";
+  
+  // 세일 관련 데이터 로드
+  $("fIsSale").checked = p ? (p.is_sale === true) : false;
+  $("fSalePrice").value = (p && p.sale_price != null) ? p.sale_price : "";
+  $("fSalePriceWrap").style.display = $("fIsSale").checked ? "block" : "none";
+
   $("fSpec").value=p?(p.spec||""):"";
   $("fDesc").value=p?(p.description||""):"";
   $("fImage").value="";
@@ -577,9 +603,19 @@ $("saveBtn").addEventListener("click",async function(){
     const f=$("fImage").files&&$("fImage").files[0];
     if(f){btn.textContent="Uploading photo…";image_path=await uploadTo(CONFIG.bucket,f,"p_");}
     const pv=$("fPrice").value.trim();
-    const rec={category_key:$("fCategory").value,tagline:tagline,name:$("fName").value.trim(),
+    
+    // 세일 정보 취합
+    const isSale = $("fIsSale").checked;
+    const sp = $("fSalePrice").value.trim();
+    const salePrice = isSale && sp !== "" ? Number(sp) : null;
+
+    const rec={
+      category_key:$("fCategory").value,tagline:tagline,name:$("fName").value.trim(),
       price:pv===""?null:Number(pv), in_stock:$("fStock").value==="true",
-      spec:$("fSpec").value.trim(),description:$("fDesc").value.trim(),image_path:image_path};
+      is_sale:isSale, sale_price:salePrice,
+      spec:$("fSpec").value.trim(),description:$("fDesc").value.trim(),image_path:image_path
+    };
+    
     btn.textContent="Saving…";
     const res = id ? await sb.from("products").update(rec).eq("id",id) : await sb.from("products").insert(rec);
     if(res.error) throw res.error;
@@ -596,7 +632,6 @@ async function delProduct(p){
   flash("Deleted."); loadProducts();
 }
 
-/* orders */
 const STATUSES=["pending","confirmed","shipped","done","cancelled"];
 async function loadOrders(){
   const { data, error } = await sb.from("orders").select("*, order_items(*)").order("created_at",{ascending:false});
@@ -659,7 +694,6 @@ function renderOrders(){
   });
 }
 
-/* settings */
 const SK={method:"payment_method",name:"payment_account_name",number:"payment_account_number",instr:"payment_instructions",logo:"brand_logo_url",qr:"brand_qr_url"};
 async function initSettings(){
   const { data } = await sb.from("shop_settings").select("key,value");
