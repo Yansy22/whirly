@@ -26,6 +26,14 @@
   .wrap{max-width:1020px;margin:0 auto;padding:0 26px;position:relative}
   .eyebrow{font-family:"Jost",sans-serif;font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--aqua);font-weight:400}
 
+  /* 글로벌 세일 배너 */
+  .sale-bar{display:none;background:var(--aqua);color:#F6EFE6;text-align:center;padding:10px 20px;font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:500;}
+  .sale-bar.on{display:block}
+  .sale-bar .dates{display:block;font-size:10px;letter-spacing:.1em;opacity:.8;text-transform:none;font-weight:400;margin-top:2px}
+  .price-old{text-decoration:line-through;color:var(--muted);font-size:0.9em;margin-right:6px}
+  .price-new{color:var(--aqua);font-weight:500}
+  .sale-badge{position:absolute;top:10px;right:10px;background:var(--aqua);color:#F6EFE6;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:4px 11px;border-radius:999px;z-index:2}
+
   .topbar{display:flex;align-items:center;justify-content:space-between;padding:26px 0 14px}
   .brandmark{display:flex;align-items:center;text-decoration:none;color:var(--moon)}
   .brandmark img{height:46px;width:auto}
@@ -110,12 +118,9 @@
   .page-frame{position:fixed;inset:16px;border:1px solid var(--frame);border-radius:4px;pointer-events:none;z-index:1}
   @media(max-width:640px){.page-frame{inset:9px}}
 
-  /* ---- prices & sales ---- */
-  .c-price{font-family:"Jost",sans-serif;font-weight:400;font-size:13px;color:var(--moon);margin-top:3px; display:flex; gap:6px; align-items:center;}
-  .price-old{text-decoration:line-through; color:var(--muted); font-size:0.9em;}
-  .price-new{color:var(--aqua); font-weight:500;}
-  .detail-price{font-family:"Cormorant Garamond",serif;font-size:26px;color:var(--moon);margin-bottom:20px; display:flex; gap:12px; align-items:center;}
-  
+  .c-price{font-family:"Jost",sans-serif;font-weight:400;font-size:13px;color:var(--moon);margin-top:3px}
+  .detail-price{font-family:"Cormorant Garamond",serif;font-size:26px;color:var(--moon);margin-bottom:20px}
+
   .cart-link{position:relative;font-size:12px;letter-spacing:.08em;color:var(--muted);border:1px solid var(--hairline);border-radius:999px;padding:8px 16px;text-decoration:none;transition:.25s;margin-left:10px;cursor:pointer;background:none;font-family:inherit}
   .cart-link:hover{color:#fff;background:var(--aqua);border-color:var(--aqua)}
   .cart-count{display:inline-block;min-width:18px;text-align:center;background:var(--aqua);color:#fff;border-radius:999px;font-size:11px;padding:0 5px;margin-left:4px}
@@ -194,7 +199,6 @@
   @media(max-width:640px){.cart-fab{right:14px;bottom:14px;padding:12px 16px}}
 
   .oos-badge{position:absolute;top:10px;left:10px;background:rgba(34,29,26,.78);color:#F6EFE6;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:4px 11px;border-radius:999px;z-index:2}
-  .sale-badge{position:absolute;top:10px;right:10px;background:var(--aqua);color:#F6EFE6;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:4px 11px;border-radius:999px;z-index:2}
   .thumb.oos img{filter:grayscale(.6);opacity:.72}
   .order.disabled{background:var(--surface2);color:var(--muted);cursor:not-allowed;box-shadow:none}
 
@@ -210,6 +214,7 @@
 </head>
 <body>
 <div class="page-frame"></div>
+<div class="sale-bar" id="sale-bar"></div>
 <div class="wrap">
   <div id="home">
     <div class="topbar">
@@ -357,6 +362,7 @@ const BRAND = {
 
   footerLeft:  "\u00a9 Whirly Co \u2014 handmade",
   footerRight: "A little studio \u00b7 made by hand in Islamabad",
+
   theme: {},
 };
 
@@ -393,6 +399,40 @@ const sb = createClient(BRAND.SUPABASE_URL, BRAND.SUPABASE_ANON_KEY);
 let CATALOG = [];
 let SETTINGS = {};
 
+/* ============================ GLOBAL SALE LOGIC ============================ */
+function localToday(){
+  const d = new Date();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+function saleInfo(){
+  if(String(SETTINGS.sale_active || "0") !== "1") return null;
+  const pct = Number(SETTINGS.sale_percent || 0);
+  if(!(pct > 0 && pct <= 100)) return null;
+  const today = localToday();
+  const from = (SETTINGS.sale_start || "").trim();
+  const to   = (SETTINGS.sale_end   || "").trim();
+  if(from && today < from) return null;
+  if(to   && today > to)   return null;
+  return { pct, from, to };
+}
+const salePct = () => { const s = saleInfo(); return s ? s.pct : 0; };
+const saleUnit = v => { const p = salePct(); return p ? Math.round(Number(v) * (100 - p) / 100) : Number(v); };
+const cartSubtotalOriginal = () => cartLoad().reduce((s,i)=>s+(Number(i.price)||0)*i.qty,0);
+const discountAmount = () => { const p = salePct(); return p ? Math.round(cartSubtotalOriginal() * p / 100) : 0; };
+const goodsTotal = () => cartSubtotalOriginal() - discountAmount();
+
+function renderSaleBar(){
+  const bar = $("sale-bar");
+  const sale = saleInfo();
+  if(!sale){ bar.className = "sale-bar"; bar.innerHTML = ""; return; }
+  const custom = (SETTINGS.sale_banner_text || "").trim();
+  const until = sale.to ? `<span class="dates">Until ${sale.to}</span>` : "";
+  bar.className = "sale-bar on";
+  bar.innerHTML = esc(custom || `${sale.pct}% off everything`) + until;
+}
+
 async function loadSettings(){
   const { data, error } = await sb.from("shop_settings").select("key,value");
   if(error){ console.warn("settings:",error.message); return; }
@@ -400,6 +440,7 @@ async function loadSettings(){
   if(SETTINGS.brand_logo_url) BRAND.logoUrl = SETTINGS.brand_logo_url;
   if(SETTINGS.brand_qr_url)   BRAND.qrUrl   = SETTINGS.brand_qr_url;
   applyBranding();
+  renderSaleBar(); // 세일 상단 배너 표시 반영
   if(CATALOG.length){ renderHome(); route(); }
 }
 function pay(field, fallback){
@@ -409,9 +450,8 @@ function pay(field, fallback){
 
 async function loadCatalog(){
   const cres = await sb.from("categories").select("*").order("sort_order").order("key");
-  // 신상품 우선 노출: created_at 기준으로 내림차순(최신순) 정렬 적용
-  const pres = await sb.from("products").select("*").order("created_at",{ascending:false});
-  
+  // 신상품 우선 정렬 적용
+  const pres = await sb.from("products").select("*").order("created_at", {ascending:false});
   if(pres.error || cres.error){ console.error(pres.error||cres.error);
     $("homeCats").innerHTML='<div class="state">Couldn\'t load the collection. Please refresh in a moment.</div>'; return; }
   const cats = cres.data||[];
@@ -473,21 +513,18 @@ function productCard(catKey,p,i){
     thumb.classList.add("oos");
     const b=document.createElement("span"); b.className="oos-badge"; b.textContent="Out of stock";
     thumb.appendChild(b);
-  } else if (p.is_sale) {
-    // 세일 배지 표시
-    const b=document.createElement("span"); b.className="sale-badge"; b.textContent="Sale";
+  } else if(salePct() > 0) {
+    const b=document.createElement("span"); b.className="sale-badge"; b.textContent="SALE";
     thumb.appendChild(b);
   }
   
   const tag=document.createElement("p"); tag.className="c-tag"; tag.textContent=p.tagline||p.name||"Untitled";
   const nm=document.createElement("p"); nm.className="c-name"; nm.textContent=p.name||"";
   a.append(thumb,tag,nm);
-  
   if(p.price!=null&&p.price!==""){
     const pr=document.createElement("p"); pr.className="c-price";
-    if (p.is_sale && p.sale_price != null) {
-      // 할인가와 기존가(취소선) 노출
-      pr.innerHTML = '<span class="price-old">'+money(p.price)+'</span><span class="price-new">'+money(p.sale_price)+'</span>';
+    if(salePct() > 0) {
+      pr.innerHTML = `<span class="price-old">${money(p.price)}</span><span class="price-new">${money(saleUnit(p.price))}</span>`;
     } else {
       pr.textContent = money(p.price);
     }
@@ -541,8 +578,8 @@ function renderDetail(key,idx){
   $("detailCat").textContent=cat.label; $("detailTag").textContent=p.tagline||p.name||"";
   $("detailName").textContent=p.name||""; $("detailSpec").textContent=p.spec||""; $("detailDesc").textContent=p.description||"";
   
-  if (p.is_sale && p.sale_price != null) {
-    $("detailPrice").innerHTML = '<span class="price-old" style="font-size:20px;">'+money(p.price)+'</span> <span class="price-new" style="font-size:26px;">'+money(p.sale_price)+'</span>';
+  if(salePct() > 0 && p.price!=null) {
+    $("detailPrice").innerHTML = `<span class="price-old" style="font-size:20px;">${money(p.price)}</span> <span class="price-new" style="font-size:26px;">${money(saleUnit(p.price))}</span>`;
   } else {
     $("detailPrice").textContent = money(p.price);
   }
@@ -604,25 +641,17 @@ function updateCartCount(){
     const h=location.hash||"#/";
     const onCartPages = (h==="#/cart"||h==="#/checkout"||h==="#/order-done");
     $("fabCount").textContent=n;
-    $("fabTotal").textContent=money(cartSubtotal());
+    $("fabTotal").textContent=money(goodsTotal());
     fab.classList.toggle("show", n>0 && !onCartPages);
   }
 }
 function cartAdd(p,qty){
   const c=cartLoad(); const ex=c.find(i=>i.id===p.id);
-  // 세일 상품은 할인가 적용
-  const activePrice = (p.is_sale && p.sale_price != null) ? p.sale_price : p.price;
-  if(ex){ 
-    ex.qty+=qty; 
-    ex.price = Number(activePrice);
-  } else { 
-    c.push({id:p.id,tagline:p.tagline||p.name||"",name:p.name||"",price:Number(activePrice),image_path:p.image_path||"",qty:qty}); 
-  }
+  if(ex){ ex.qty+=qty; } else { c.push({id:p.id,tagline:p.tagline||p.name||"",name:p.name||"",price:Number(p.price),image_path:p.image_path||"",qty:qty}); }
   cartSave(c);
 }
 function cartSetQty(id,qty){ const c=cartLoad(); const it=c.find(i=>i.id===id); if(it){ it.qty=Math.max(1,qty); } cartSave(c); }
 function cartRemove(id){ cartSave(cartLoad().filter(i=>i.id!==id)); }
-function cartSubtotal(){ return cartLoad().reduce((s,i)=>s+(Number(i.price)||0)*i.qty,0); }
 function shippingPrice(){ const m=(BRAND.shippingMethods||[])[selectedShippingIdx()]; return m?Number(m.price)||0:0; }
 function selectedShippingIdx(){ const s=$("coShipping"); return s&&s.value!==""?Number(s.value):0; }
 
@@ -634,16 +663,23 @@ function renderCart(){
     const media = it.image_path
       ? '<img src="'+esc(it.image_path)+'" alt="">'
       : phMarkup("ph", it.tagline);
+    const unitPr = salePct() > 0 ? `<s class="price-old">${money(it.price)}</s> ${money(saleUnit(it.price))}` : money(it.price);
     html+='<div class="cart-row" data-id="'+it.id+'">'+media+
       '<div class="cart-info"><div class="t">'+esc(it.tagline)+'</div>'+
-      '<div class="pr">'+esc(money(it.price))+' each</div>'+
+      '<div class="pr">'+unitPr+' each</div>'+
       '<div class="qty" style="margin-top:8px"><button class="q-minus">\u2212</button><span>'+it.qty+'</span><button class="q-plus">+</button></div></div>'+
       '<button class="cart-remove">Remove</button></div>';
   });
-  const sub=cartSubtotal();
-  html+='<div class="summary"><div class="line"><span>Subtotal</span><span>'+esc(money(sub))+'</span></div></div>'+
-        '<a class="cta" href="#/checkout">Checkout</a>';
-  box.innerHTML=html;
+  
+  const sub = cartSubtotalOriginal();
+  const disc = discountAmount();
+  let htmlSummary = `<div class="summary"><div class="line"><span>Subtotal</span><span>${esc(money(sub))}</span></div>`;
+  if(disc > 0) {
+    htmlSummary += `<div class="line srow save" style="color:var(--aqua)"><span>Sale -${salePct()}%</span><span>- ${esc(money(disc))}</span></div>`;
+  }
+  htmlSummary += `<div class="line total"><span>Total</span><span>${esc(money(goodsTotal()))}</span></div></div><a class="cta" href="#/checkout">Checkout</a>`;
+  
+  box.innerHTML = html + htmlSummary;
   box.querySelectorAll(".cart-row").forEach(row=>{
     const id=Number(row.getAttribute("data-id"));
     row.querySelector(".q-minus").onclick=()=>{const it=cartLoad().find(i=>i.id===id);cartSetQty(id,(it?it.qty:1)-1);renderCart();};
@@ -671,8 +707,9 @@ function renderCheckout(){
   renderSummary();
 }
 function renderSummary(){
-  const c=cartLoad(); const sub=cartSubtotal(); const ship=shippingPrice(); const total=sub+ship;
+  const c=cartLoad(); const sub=cartSubtotalOriginal(); const disc=discountAmount(); const ship=shippingPrice(); const total=goodsTotal()+ship;
   let lines=c.map(i=>'<div class="line"><span>'+esc(i.tagline)+' \u00d7 '+i.qty+'</span><span>'+esc(money((Number(i.price)||0)*i.qty))+'</span></div>').join("");
+  if(disc > 0) lines+='<div class="line" style="color:var(--aqua)"><span>Sale -'+salePct()+'%</span><span>- '+esc(money(disc))+'</span></div>';
   lines+='<div class="line"><span>Shipping</span><span>'+(ship?esc(money(ship)):"Free")+'</span></div>';
   lines+='<div class="line total"><span>Total</span><span>'+esc(money(total))+'</span></div>';
   $("coSummary").innerHTML=lines;
@@ -702,9 +739,10 @@ $("coSubmit").addEventListener("click",async function(){
     const receiptPath=await uploadReceipt(receiptFile);
     const shipIdx=selectedShippingIdx();
     const shipMethod=(BRAND.shippingMethods||[])[shipIdx];
-    const total=cartSubtotal()+shippingPrice();
+    const total=goodsTotal()+shippingPrice();
     btn.textContent="Placing order…";
-    const items=c.map(i=>({ product_id:i.id, product_name:i.tagline, unit_price:Number(i.price)||0, quantity:i.qty }));
+    // DB의 결제 금액 정확도를 위해 할인이 적용된 최종 단가를 전송
+    const items=c.map(i=>({ product_id:i.id, product_name:i.tagline, unit_price:Number(saleUnit(i.price))||0, quantity:i.qty }));
     const { data:orderId, error:oErr } = await sb.rpc("place_order",{
       p_customer_name:name, p_customer_contact:contact, p_shipping_address:address,
       p_shipping_method: shipMethod?shipMethod.label:"",
