@@ -46,7 +46,6 @@
   .pcard img{width:100%;height:100%;object-fit:cover}
   .pcard .ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--aqua);font-family:"Cormorant Garamond",serif;font-size:34px}
   .pcard .oos{position:absolute;top:7px;left:7px;background:rgba(30,26,24,.8);color:#F6EFE6;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px}
-  .pcard .sale-badge{position:absolute;top:7px;right:7px;background:var(--aqua);color:#F6EFE6;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px}
   .pcard .body{padding:9px 10px 10px;flex:1;display:flex;flex-direction:column;gap:2px}
   .pcard .t{font-family:"Cormorant Garamond",serif;font-style:italic;font-size:15px;color:var(--aqua);line-height:1.25}
   .pcard .cat{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -152,6 +151,7 @@
       <button class="tab active" data-tab="orders">Orders <span class="n" id="nOrders"></span></button>
       <button class="tab" data-tab="products">Pieces <span class="n" id="nProducts"></span></button>
       <button class="tab" data-tab="categories">Categories</button>
+      <button class="tab" data-tab="sale">Sale</button>
       <button class="tab" data-tab="settings">Settings</button>
     </div>
 
@@ -177,6 +177,31 @@
       <div class="drag-hint">↕ Drag the handle on the left to change the order customers see.</div>
       <div id="cats"><div class="empty">Loading…</div></div>
       <button class="btn block" id="addCatBtn" style="margin-top:14px">+ New category</button>
+    </section>
+
+    <section id="paneSale" style="display:none">
+      <div class="card" id="saleOverviewCard" style="margin-bottom:14px; transition: background 0.3s, border-color 0.3s"></div>
+      <div class="card">
+        <div style="margin-bottom:16px;">
+          <label style="display:flex; align-items:center; gap:8px; font-size:14.5px; text-transform:none; letter-spacing:0; color:var(--moon); cursor:pointer;">
+            <input type="checkbox" id="sl-active" style="width:auto; margin:0">
+            Run a global sale
+          </label>
+        </div>
+        <label>Discount (%)</label>
+        <input id="sl-percent" type="number" min="1" max="100" placeholder="e.g. 15" style="margin-bottom:12px">
+        <div class="row" style="margin-bottom:12px">
+          <div><label>Start Date</label><input type="date" id="sl-start"></div>
+          <div><label>End Date</label><input type="date" id="sl-end"></div>
+        </div>
+        <div class="hint" style="margin-top:-6px; margin-bottom:12px;">Dates apply based on your local time. Leave empty to run indefinitely.</div>
+        <label>Banner wording (optional)</label>
+        <input id="sl-text" placeholder="e.g. 15% off everything" style="margin-bottom:6px">
+        <div class="hint">Shown across the top of your site. Leave empty and it writes itself.</div>
+        <div class="actions">
+          <button class="btn" id="sl-save" onclick="svSale()">Save sale settings</button>
+        </div>
+      </div>
     </section>
 
     <section id="paneSettings" style="display:none">
@@ -247,21 +272,6 @@
         <select id="fStock"><option value="true">In stock</option><option value="false">Out of stock</option></select>
       </div>
     </div>
-    
-    <!-- SALE 옵션 추가 섹션 -->
-    <div class="row" style="align-items:center; margin-top:10px;">
-      <div>
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; color:var(--aqua);">
-          <input type="checkbox" id="fIsSale" style="width:auto; margin:0; cursor:pointer;" /> 
-          Mark as On Sale
-        </label>
-      </div>
-      <div id="fSalePriceWrap" style="display:none;">
-        <label style="margin-top:0;">Sale Price (PKR)</label>
-        <input id="fSalePrice" type="number" inputmode="numeric" min="0" placeholder="500" />
-      </div>
-    </div>
-
     <label>Short spec line (optional)</label>
     <input id="fSpec" placeholder="Silver-tone · hook fitting" />
     <label>Description (optional)</label>
@@ -322,7 +332,7 @@ function flash(t,ok){const m=$("msg");m.textContent=t;m.className="msg "+(ok===f
 
 let CATS=[], PRODUCTS=[], ORDERS=[];
 let pQuery="", pCat="all", oFilter="all";
-let LOGO="";
+let LOGO="", SETTINGS={};
 
 function ph(cls,fallback){
   return LOGO
@@ -354,12 +364,6 @@ function boot(){
   document.querySelectorAll(".tab").forEach(function(t){ t.addEventListener("click",function(){switchTab(t.getAttribute("data-tab"));}); });
   $("pSearch").addEventListener("input",function(){pQuery=this.value.toLowerCase().trim();renderProducts();});
   $("pFilter").addEventListener("change",function(){pCat=this.value;renderProducts();});
-  
-  // 세일 가격 토글 이벤트
-  $("fIsSale").addEventListener("change", function(){
-    $("fSalePriceWrap").style.display = this.checked ? "block" : "none";
-  });
-
   initSettings(); initAccount(); loadAll();
 }
 function switchTab(name){
@@ -367,9 +371,11 @@ function switchTab(name){
   $("paneOrders").style.display=name==="orders"?"block":"none";
   $("paneProducts").style.display=name==="products"?"block":"none";
   $("paneCategories").style.display=name==="categories"?"block":"none";
+  $("paneSale").style.display=name==="sale"?"block":"none";
   $("paneSettings").style.display=name==="settings"?"block":"none";
   $("fabAdd").style.display=name==="products"?"inline-flex":"none";
   if(name==="orders") loadOrders();
+  if(name==="sale") renderSalePane();
 }
 async function loadAll(){ await loadCats(); await loadProducts(); await loadOrders(); }
 
@@ -423,25 +429,6 @@ function wireDrag(el){
     const to=Number(el.dataset.idx);
     if(dragFrom===null || dragFrom===to) return;
     reorder(dragFrom,to);
-  });
-
-  const grip=el.querySelector(".grip");
-  grip.addEventListener("touchstart",function(){ dragFrom=Number(el.dataset.idx); el.classList.add("dragging"); },{passive:true});
-  grip.addEventListener("touchmove",function(e){
-    const t=e.touches[0];
-    const under=document.elementFromPoint(t.clientX,t.clientY);
-    const row=under&&under.closest(".crow");
-    document.querySelectorAll(".crow").forEach(function(r){r.classList.remove("over");});
-    if(row&&Number(row.dataset.idx)!==dragFrom) row.classList.add("over");
-  },{passive:true});
-  grip.addEventListener("touchend",function(e){
-    el.classList.remove("dragging");
-    const t=e.changedTouches[0];
-    const under=document.elementFromPoint(t.clientX,t.clientY);
-    const row=under&&under.closest(".crow");
-    document.querySelectorAll(".crow").forEach(function(r){r.classList.remove("over");});
-    if(row){ const to=Number(row.dataset.idx); if(dragFrom!==null&&dragFrom!==to) reorder(dragFrom,to); }
-    dragFrom=null;
   });
 }
 async function reorder(from,to){
@@ -508,8 +495,8 @@ async function delCat(c,count){
 }
 
 async function loadProducts(){
-  // 관리자 화면에서도 신상품이 위에 오도록 created_at 기준 정렬 추가
-  const { data, error } = await sb.from("products").select("*").order("category_key").order("created_at", {ascending:false});
+  // 관리자 화면에서도 신상품(최근 등록된 순) 정렬 적용
+  const { data, error } = await sb.from("products").select("*").order("category_key").order("created_at",{ascending:false});
   if(error){$("products").innerHTML='<div class="empty">Error: '+esc(error.message)+'</div>';return;}
   PRODUCTS=data||[];
   $("nProducts").textContent="("+PRODUCTS.length+")";
@@ -545,12 +532,11 @@ function renderProducts(){
   list.forEach(function(p){
     const el=document.createElement("div"); el.className="pcard";
     const media=p.image_path?'<img src="'+esc(p.image_path)+'" alt="">':ph("ph",(p.tagline||p.name||"?").charAt(0).toUpperCase());
-    const saleBadge = p.is_sale ? '<span class="sale-badge">SALE</span>' : '';
     
-    el.innerHTML='<div class="ph-wrap">'+media+(p.in_stock===false?'<span class="oos">Out of stock</span>':saleBadge)+'</div>'+
+    el.innerHTML='<div class="ph-wrap">'+media+(p.in_stock===false?'<span class="oos">Out of stock</span>':'')+'</div>'+
       '<div class="body"><div class="cat">'+esc(catLabel(p.category_key))+'</div>'+
       '<div class="t">'+esc(p.tagline||p.name||"Untitled")+'</div>'+
-      '<div class="pr">'+(p.price!=null&&p.price!==""?(p.is_sale?'<s style="color:var(--muted); font-size:11px;">'+esc(money(p.price))+'</s> '+esc(money(p.sale_price)):esc(money(p.price))):'<span style="color:var(--danger)">No price</span>')+'</div></div>'+
+      '<div class="pr">'+(p.price!=null&&p.price!==""?esc(money(p.price)):'<span style="color:var(--danger)">No price</span>')+'</div></div>'+
       '<div class="btns"><button class="e">Edit</button><button class="d">Delete</button></div>';
     el.querySelector(".e").onclick=function(){openProduct(p);};
     el.querySelector(".d").onclick=function(){delProduct(p);};
@@ -566,12 +552,6 @@ function openProduct(p){
   $("fName").value=p?(p.name||""):"";
   $("fPrice").value=(p&&p.price!=null)?p.price:"";
   $("fStock").value=(p&&p.in_stock===false)?"false":"true";
-  
-  // 세일 관련 데이터 로드
-  $("fIsSale").checked = p ? (p.is_sale === true) : false;
-  $("fSalePrice").value = (p && p.sale_price != null) ? p.sale_price : "";
-  $("fSalePriceWrap").style.display = $("fIsSale").checked ? "block" : "none";
-
   $("fSpec").value=p?(p.spec||""):"";
   $("fDesc").value=p?(p.description||""):"";
   $("fImage").value="";
@@ -603,18 +583,9 @@ $("saveBtn").addEventListener("click",async function(){
     const f=$("fImage").files&&$("fImage").files[0];
     if(f){btn.textContent="Uploading photo…";image_path=await uploadTo(CONFIG.bucket,f,"p_");}
     const pv=$("fPrice").value.trim();
-    
-    // 세일 정보 취합
-    const isSale = $("fIsSale").checked;
-    const sp = $("fSalePrice").value.trim();
-    const salePrice = isSale && sp !== "" ? Number(sp) : null;
-
-    const rec={
-      category_key:$("fCategory").value,tagline:tagline,name:$("fName").value.trim(),
+    const rec={category_key:$("fCategory").value,tagline:tagline,name:$("fName").value.trim(),
       price:pv===""?null:Number(pv), in_stock:$("fStock").value==="true",
-      is_sale:isSale, sale_price:salePrice,
-      spec:$("fSpec").value.trim(),description:$("fDesc").value.trim(),image_path:image_path
-    };
+      spec:$("fSpec").value.trim(),description:$("fDesc").value.trim(),image_path:image_path};
     
     btn.textContent="Saving…";
     const res = id ? await sb.from("products").update(rec).eq("id",id) : await sb.from("products").insert(rec);
@@ -630,6 +601,71 @@ async function delProduct(p){
   const { error } = await sb.from("products").delete().eq("id",p.id);
   if(error){flash("Couldn't delete: "+error.message,false);return;}
   flash("Deleted."); loadProducts();
+}
+
+/* ============================ GLOBAL SALE PANE LOGIC ============================ */
+function localToday(){
+  const d = new Date();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+function saleState(){
+  const pct = Number(SETTINGS.sale_percent || 0);
+  const from = (SETTINGS.sale_start || "").trim();
+  const to = (SETTINGS.sale_end || "").trim();
+  const today = localToday();
+  if(String(SETTINGS.sale_active || "0") !== "1") return { on:false, label:"Off", why:"The switch is off, so customers pay full price." };
+  if(!(pct > 0 && pct <= 100)) return { on:false, label:"Off", why:"Set a discount between 1 and 100 to start a sale." };
+  if(from && today < from) return { on:false, label:"Scheduled", why:`Starts on ${from}. Nothing changes on the site until then.` };
+  if(to && today > to) return { on:false, label:"Finished", why:`Ended on ${to}. Customers are back to full price.` };
+  return { on:true, label:"Running", why:`Customers are getting ${pct}% off everything right now.` + (to ? ` Stops after ${to}.` : " Runs indefinitely until you turn it off.") };
+}
+
+function renderSalePane(){
+  const s = saleState();
+  $("sl-active").checked = String(SETTINGS.sale_active||"0")==="1";
+  $("sl-percent").value = SETTINGS.sale_percent || "";
+  $("sl-start").value = SETTINGS.sale_start || "";
+  $("sl-end").value = SETTINGS.sale_end || "";
+  $("sl-text").value = SETTINGS.sale_banner_text || "";
+
+  const over = $("saleOverviewCard");
+  over.style.background = s.on ? "rgba(122,26,40,.08)" : "var(--surface)";
+  over.style.borderColor = s.on ? "var(--aqua)" : "var(--line)";
+  over.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span class="badge ${s.on ? 'confirmed' : 'cancelled'}">${s.label}</span>
+      <strong style="font-size:15px; color:var(--moon)">${s.on ? `${SETTINGS.sale_percent}% off everything` : "No sale running"}</strong>
+    </div>
+    <div style="font-size:13px;color:var(--muted)">${s.why}</div>
+  `;
+}
+
+async function svSale(){
+  const btn = $("sl-save");
+  btn.disabled = true; btn.textContent = "Saving…";
+  const active = $("sl-active").checked ? "1" : "0";
+  const pct = $("sl-percent").value.trim();
+  const from = $("sl-start").value;
+  const to = $("sl-end").value;
+  const txt = $("sl-text").value.trim();
+
+  try{
+    const values = { sale_active: active, sale_percent: pct, sale_start: from, sale_end: to, sale_banner_text: txt };
+    const rows = Object.keys(values).map(k => ({key:k, value:values[k]}));
+    const { error } = await sb.from("shop_settings").upsert(rows,{onConflict:"key"});
+    if(error) throw error;
+    
+    // 로컬 SETTINGS 변수 갱신 후 UI 재랜더링
+    Object.assign(SETTINGS, values);
+    renderSalePane();
+    flash("Sale settings saved successfully!");
+  }catch(e){
+    flash("Could not save: " + e.message, false);
+  }finally{
+    btn.disabled = false; btn.textContent = "Save sale settings";
+  }
 }
 
 const STATUSES=["pending","confirmed","shipped","done","cancelled"];
@@ -698,6 +734,8 @@ const SK={method:"payment_method",name:"payment_account_name",number:"payment_ac
 async function initSettings(){
   const { data } = await sb.from("shop_settings").select("key,value");
   const map={}; (data||[]).forEach(function(r){map[r.key]=r.value;});
+  SETTINGS = map; // 글로벌 설정 변수 캐싱
+  
   $("setMethod").value=map[SK.method]||""; $("setName").value=map[SK.name]||"";
   $("setNumber").value=map[SK.number]||""; $("setInstr").value=map[SK.instr]||"";
 
